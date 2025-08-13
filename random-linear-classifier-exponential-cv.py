@@ -72,7 +72,7 @@ def find_best_hypothesis(X, y, K, d=2):
     return best_theta0, best_theta, min_error
 
 # Cross-validation to tune K
-k_values = [50, 100, 200, 500, 1000]
+k_values = [50, 100, 200, 500, 1000, 2000, 5000]  # Increased max K
 num_folds = 5
 kf = KFold(n_splits=num_folds)
 
@@ -117,13 +117,24 @@ if len(misclassified_idx) > 0:
 else:
     print("No misclassified test points.")
 
-# Create figure with five subplots
-fig = plt.figure(figsize=(24, 10))
+# Transform decision boundary to raw space
+# Scaled: theta0 + theta[0]*x1_scaled + theta[1]*x2_scaled = 0
+# Raw: x1_scaled = (x1 - min_x1)/(max_x1 - min_x1), x2_scaled = (x2 - min_x2)/(max_x2 - min_x2)
+min_x1, max_x1 = np.min(X[:, 0]), np.max(X[:, 0])
+min_x2, max_x2 = np.min(X[:, 1]), np.max(X[:, 1])
+theta0_raw = best_theta0 - best_theta[0] * min_x1 / (max_x1 - min_x1) - best_theta[1] * min_x2 / (max_x2 - min_x2)
+theta1_raw = best_theta[0] / (max_x1 - min_x1)
+theta2_raw = best_theta[1] / (max_x2 - min_x2)
+
+# Create figure with six subplots
+fig = plt.figure(figsize=(24, 12))
 
 # Subplot 1: Scatter plot with decision boundary (scaled features)
 ax1 = fig.add_subplot(231)
 ax1.scatter(X_scaled[y == 1][:, 0], X_scaled[y == 1][:, 1], color='blue', label='Dogs (+1)')
 ax1.scatter(X_scaled[y == -1][:, 0], X_scaled[y == -1][:, 1], color='red', label='Cats (-1)')
+if len(misclassified_idx) > 0:
+    ax1.scatter(X_test[misclassified_idx, 0], X_test[misclassified_idx, 1], color='black', marker='x', s=100, label='Misclassified')
 x_vals = np.linspace(np.min(X_scaled[:, 0]), np.max(X_scaled[:, 0]), 100)
 if best_theta[1] != 0:
     y_vals = -(best_theta0 + best_theta[0] * x_vals) / best_theta[1]
@@ -133,63 +144,83 @@ else:
     ax1.axvline(x=x_vert, color='green', label='Decision Boundary')
 ax1.set_xlabel('Whisker Length (Scaled)')
 ax1.set_ylabel('Ear Flappiness Index (Scaled)')
-ax1.set_title('Data Points and Decision Boundary')
+ax1.set_title('Scaled Data and Decision Boundary')
 ax1.legend()
 ax1.grid(True)
 
-# Subplot 2: Whisker Length PDFs (raw data)
+# Subplot 2: Scatter plot with decision boundary (raw features)
 ax2 = fig.add_subplot(232)
-x_range = np.linspace(0, np.max(X[:, 0]), 100)
-ax2.hist(dog_whiskers, bins=20, density=True, alpha=0.5, color='blue', label='Dogs (Hist)')
-ax2.plot(x_range, 0.5 * np.exp(-0.5 * x_range), 'b-', label='Dogs Exp(2)')
-ax2.hist(cat_whiskers, bins=20, density=True, alpha=0.5, color='red', label='Cats (Hist)')
-ax2.plot(x_range, 0.25 * np.exp(-0.25 * x_range), 'r-', label='Cats Exp(4)')
+ax2.scatter(X[y == 1][:, 0], X[y == 1][:, 1], color='blue', label='Dogs (+1)')
+ax2.scatter(X[y == -1][:, 0], X[y == -1][:, 1], color='red', label='Cats (-1)')
+if len(misclassified_idx) > 0:
+    X_test_raw = scaler.inverse_transform(X_test)
+    ax2.scatter(X_test_raw[misclassified_idx, 0], X_test_raw[misclassified_idx, 1], color='black', marker='x', s=100, label='Misclassified')
+x_vals_raw = np.linspace(np.min(X[:, 0]), np.max(X[:, 0]), 100)
+if theta2_raw != 0:
+    y_vals_raw = -(theta0_raw + theta1_raw * x_vals_raw) / theta2_raw
+    ax2.plot(x_vals_raw, y_vals_raw, color='green', label='Decision Boundary')
+else:
+    x_vert_raw = -theta0_raw / theta1_raw
+    ax2.axvline(x=x_vert_raw, color='green', label='Decision Boundary')
 ax2.set_xlabel('Whisker Length (Raw)')
-ax2.set_ylabel('Density')
-ax2.set_title('Whisker Length Distributions')
+ax2.set_ylabel('Ear Flappiness Index (Raw)')
+ax2.set_title('Raw Data and Decision Boundary')
 ax2.legend()
 ax2.grid(True)
 
-# Subplot 3: Ear Flappiness Index PDFs (raw data)
+# Subplot 3: Whisker Length PDFs (raw data)
 ax3 = fig.add_subplot(233)
-x_range = np.linspace(0, np.max(X[:, 1]), 100)
-ax3.hist(dog_ears, bins=20, density=True, alpha=0.5, color='blue', label='Dogs (Hist)')
-ax3.plot(x_range, 0.25 * np.exp(-0.25 * x_range), 'b-', label='Dogs Exp(4)')
-ax3.hist(cat_ears, bins=20, density=True, alpha=0.5, color='red', label='Cats (Hist)')
-ax3.plot(x_range, 0.5 * np.exp(-0.5 * x_range), 'r-', label='Cats Exp(2)')
-ax3.set_xlabel('Ear Flappiness Index (Raw)')
+x_range = np.linspace(0, np.max(X[:, 0]), 100)
+ax3.hist(dog_whiskers, bins=20, density=True, alpha=0.5, color='blue', label='Dogs (Hist)')
+ax3.plot(x_range, 0.5 * np.exp(-0.5 * x_range), 'b-', label='Dogs Exp(2)')
+ax3.hist(cat_whiskers, bins=20, density=True, alpha=0.5, color='red', label='Cats (Hist)')
+ax3.plot(x_range, 0.25 * np.exp(-0.25 * x_range), 'r-', label='Cats Exp(4)')
+ax3.set_xlabel('Whisker Length (Raw)')
 ax3.set_ylabel('Density')
-ax3.set_title('Ear Flappiness Index Distributions')
+ax3.set_title('Whisker Length Distributions')
 ax3.legend()
 ax3.grid(True)
 
-# Subplot 4: Dogs 2D KDE with scatter (raw data)
+# Subplot 4: Ear Flappiness Index PDFs (raw data)
 ax4 = fig.add_subplot(234)
+x_range = np.linspace(0, np.max(X[:, 1]), 100)
+ax4.hist(dog_ears, bins=20, density=True, alpha=0.5, color='blue', label='Dogs (Hist)')
+ax4.plot(x_range, 0.25 * np.exp(-0.25 * x_range), 'b-', label='Dogs Exp(4)')
+ax4.hist(cat_ears, bins=20, density=True, alpha=0.5, color='red', label='Cats (Hist)')
+ax4.plot(x_range, 0.5 * np.exp(-0.5 * x_range), 'r-', label='Cats Exp(2)')
+ax4.set_xlabel('Ear Flappiness Index (Raw)')
+ax4.set_ylabel('Density')
+ax4.set_title('Ear Flappiness Index Distributions')
+ax4.legend()
+ax4.grid(True)
+
+# Subplot 5: Dogs 2D KDE with scatter (raw data)
+ax5 = fig.add_subplot(235)
 x_grid = np.linspace(0, np.max(X[:, 0]), 100)
 y_grid = np.linspace(0, np.max(X[:, 1]), 100)
 X_grid, Y_grid = np.meshgrid(x_grid, y_grid)
 positions = np.vstack([X_grid.ravel(), Y_grid.ravel()])
 kde_dogs = gaussian_kde(dogs.T)
 Z_dogs = np.reshape(kde_dogs(positions).T, X_grid.shape)
-ax4.contourf(X_grid, Y_grid, Z_dogs, cmap='Blues', alpha=0.5)
-ax4.scatter(dogs[:, 0], dogs[:, 1], color='blue', s=10, label='Dogs')
-ax4.set_xlabel('Whisker Length (Raw)')
-ax4.set_ylabel('Ear Flappiness Index (Raw)')
-ax4.set_title('Dogs 2D KDE (Exp(2), Exp(4))')
-ax4.legend()
-ax4.grid(True)
-
-# Subplot 5: Cats 2D KDE with scatter (raw data)
-ax5 = fig.add_subplot(235)
-kde_cats = gaussian_kde(cats.T)
-Z_cats = np.reshape(kde_cats(positions).T, X_grid.shape)
-ax5.contourf(X_grid, Y_grid, Z_cats, cmap='Reds', alpha=0.5)
-ax5.scatter(cats[:, 0], cats[:, 1], color='red', s=10, label='Cats')
+ax5.contourf(X_grid, Y_grid, Z_dogs, cmap='Blues', alpha=0.5)
+ax5.scatter(dogs[:, 0], dogs[:, 1], color='blue', s=10, label='Dogs')
 ax5.set_xlabel('Whisker Length (Raw)')
 ax5.set_ylabel('Ear Flappiness Index (Raw)')
-ax5.set_title('Cats 2D KDE (Exp(4), Exp(2))')
+ax5.set_title('Dogs 2D KDE (Exp(2), Exp(4))')
 ax5.legend()
 ax5.grid(True)
+
+# Subplot 6: Cats 2D KDE with scatter (raw data)
+ax6 = fig.add_subplot(236)
+kde_cats = gaussian_kde(cats.T)
+Z_cats = np.reshape(kde_cats(positions).T, X_grid.shape)
+ax6.contourf(X_grid, Y_grid, Z_cats, cmap='Reds', alpha=0.5)
+ax6.scatter(cats[:, 0], cats[:, 1], color='red', s=10, label='Cats')
+ax6.set_xlabel('Whisker Length (Raw)')
+ax6.set_ylabel('Ear Flappiness Index (Raw)')
+ax6.set_title('Cats 2D KDE (Exp(4), Exp(2))')
+ax6.legend()
+ax6.grid(True)
 
 plt.tight_layout()
 plt.show()
